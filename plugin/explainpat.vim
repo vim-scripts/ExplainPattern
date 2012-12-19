@@ -4,7 +4,7 @@
 " Rev Days:     3
 " Author:	Andy Wokula <anwoku@yahoo.de>
 " License:	Vim License, see :h license
-" Version:	0.1
+" Version:	0.2
 
 " :ExplainPattern [pattern]
 "

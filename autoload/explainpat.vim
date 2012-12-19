@@ -4,7 +4,7 @@
 " Rev Days:     3
 " Author:	Andy Wokula <anwoku@yahoo.de>
 " License:	Vim License, see :h license
-" Version:	0.1
+" Version:	0.2
 
 " Implements :ExplainPattern [pattern]
 
@@ -78,7 +78,7 @@ let s:DICT   = type({})
 let s:FUNCREF = type(function("tr"))
 " }}}
 
-let s:magic_item_pattern = '\C^\%(\\\%(@<.\|%\%([dxouU[(^$V#]\|[<>]\=\%(''.\)\=\)\|z[1-9se(]\|{\|@[>=!]\|_[[^$.]\=\|.\)\|.\)'
+let s:magic_item_pattern = '\C^\%(\\\%(@<.\|%[dxouU[(^$V#<>]\=\|z[1-9se(]\|{\|@[>=!]\|_[[^$.]\=\|.\)\|.\)'
 
 let s:doc = {} " {{{
 " this is all the help data ...
@@ -177,50 +177,56 @@ let s:doc['\%#'] = "(assertion) match with cursor position"
 " \%23v  \%<23v  \%>23v
 " backslash percent at/before/after
 func! s:DocBspercAt(bull, hulit, item) "{{{
-    let rest = a:bull.Bite('^\%(''.\|\d\+[lvc]\)')
+    let rest = a:bull.Bite('^\%(''.\|\d\+[lvc]\)\C')
     if rest[0] == "'"
-	call a:hulit.Print("(assertion) match with position of mark ". rest[1])
+	call a:hulit.Print(a:item.rest, "(assertion) match with position of mark ". rest[1])
     else
 	let number = rest[:-2]
 	let type = rest[-1:]
-	if type == "l"
-	    call a:hulit.Print("match in line ". number)
-	elseif type == "c"
-	    call a:hulit.Print("match in column ". number)
-	elseif type == "v"
-	    call a:hulit.Print("match in virtual column ". number)
+	if type ==# "l"
+	    call a:hulit.Print(a:item.rest, "match in line ". number)
+	elseif type ==# "c"
+	    call a:hulit.Print(a:item.rest, "match in column ". number)
+	elseif type ==# "v"
+	    call a:hulit.Print(a:item.rest, "match in virtual column ". number)
+	else
+	    echoerr printf('ExplainPattern: incomplete item %s', a:item. rest)
 	endif
     endif
 endfunc "}}}
 func! s:DocBspercBefore(bull, hulit, item) "{{{
-    let rest = a:bull.Bite('^\%(''.\|\d\+[lvc]\)')
+    let rest = a:bull.Bite('^\%(''.\|\d\+[lvc]\)\C')
     if rest[0] == "'"
-	call a:hulit.Print("(assertion) match before position of mark ". rest[1])
+	call a:hulit.Print(a:item.rest, "(assertion) match before position of mark ". rest[1])
     else
 	let number = rest[:-2]
 	let type = rest[-1:]
-	if type == "l"
-	    call a:hulit.Print("match above line ". number)
-	elseif type == "c"
-	    call a:hulit.Print("match before column ". number)
-	elseif type == "v"
-	    call a:hulit.Print("match before virtual column ". number)
+	if type ==# "l"
+	    call a:hulit.Print(a:item.rest, printf("match above line %d (towards start of buffer)", number))
+	elseif type ==# "c"
+	    call a:hulit.Print(a:item.rest, "match before column ". number)
+	elseif type ==# "v"
+	    call a:hulit.Print(a:item.rest, "match before virtual column ". number)
+	else
+	    echoerr printf('ExplainPattern: incomplete item %s', a:item. rest)
 	endif
     endif
 endfunc "}}}
 func! s:DocBspercAfter(bull, hulit, item) "{{{
-    let rest = a:bull.Bite('^\%(''.\|\d\+[lvc]\)')
+    let rest = a:bull.Bite('^\%(''.\|\d\+[lvc]\)\C')
     if rest[0] == "'"
-	call a:hulit.Print("(assertion) match after position of mark ". rest[1])
+	call a:hulit.Print(a:item.rest, "(assertion) match after position of mark ". rest[1])
     else
 	let number = rest[:-2]
 	let type = rest[-1:]
-	if type == "l"
-	    call a:hulit.Print("match below line ". number)
-	elseif type == "c"
-	    call a:hulit.Print("match after column ". number)
-	elseif type == "v"
-	    call a:hulit.Print("match after virtual column ". number)
+	if type ==# "l"
+	    call a:hulit.Print(a:item.rest, printf("match below line %d (towards end of buffer)", number))
+	elseif type ==# "c"
+	    call a:hulit.Print(a:item.rest, "match after column ". number)
+	elseif type ==# "v"
+	    call a:hulit.Print(a:item.rest, "match after virtual column ". number)
+	else
+	    echoerr printf('ExplainPattern: incomplete item %s', a:item. rest)
 	endif
     endif
 endfunc "}}}
@@ -282,7 +288,11 @@ let s:coll_skip_pat = '^\^\=]\=\%(\%(\\[\^\]\-\\bertn]\|\[:\w\+:]\|[^\]]\)\@>\)*
 
 func! s:DocCollection(bull, hulit, item) "{{{
     let collstr = a:bull.Bite(s:coll_skip_pat)
-    call a:hulit.Print(a:item. collstr, 'collection'. (a:item=='\_[' ? ' with end-of-line added' : ''))
+    let inverse = collstr =~ '^\^'
+    let with_nl = a:item == '\_['
+    let descr = inverse ? printf('collection not matching [%s', collstr[1:]) : 'collection'
+    let descr_nl = printf("%s%s", (inverse && with_nl ? ', but' : ''), (with_nl ? ' with end-of-line added' : ''))
+    call a:hulit.Print(a:item. collstr, descr. descr_nl)
 endfunc "}}}
 
 let s:doc['['] = function("s:DocCollection")
@@ -320,23 +330,28 @@ let s:doc['\Z'] = "ignore composing characters in the pattern"
 
 func! s:DocBspercDecimal(bull, hulit, item) "{{{
     let number = a:bull.Bite('^\d\{,3}')
-    call a:hulit.Print(a:item. number, "match character specified by decimal number ". number)
+    let char = strtrans(nr2char(str2nr(number)))
+    call a:hulit.Print(a:item. number, printf("match character specified by decimal number %s (%s)", number, char))
 endfunc "}}}
 func! s:DocBspercHexTwo(bull, hulit, item) "{{{
     let number = a:bull.Bite('^\x\{,2}')
-    call a:hulit.Print(a:item. number, "match character specified with hex number 0x". number)
+    let char = strtrans(nr2char(str2nr(number,16)))
+    call a:hulit.Print(a:item. number, printf("match character specified with hex number 0x%s (%s)", number, char))
 endfunc "}}}
 func! s:DocBspercOctal(bull, hulit, item) "{{{
     let number = a:bull.Bite('^\o\{,4}')
-    call a:hulit.Print(a:item. number, "match character specified with octal number 0". substitute(number, '^0*', '', ''))
+    let char = strtrans(nr2char(str2nr(number,8)))
+    call a:hulit.Print(a:item. number, printf("match character specified with octal number 0%s (%s)", substitute(number, '^0*', '', ''), char))
 endfunc "}}}
 func! s:DocBspercHexFour(bull, hulit, item) "{{{
     let number = a:bull.Bite('^\x\{,4}')
-    call a:hulit.Print(a:item. number, "match character specified with hex number 0x". number)
+    let char = has("multi_byte_encoding") ? ' ('. strtrans(nr2char(str2nr(number,16))).')' : ''
+    call a:hulit.Print(a:item. number, printf("match character specified with hex number 0x%s%s", number, char))
 endfunc "}}}
 func! s:DocBspercHexEight(bull, hulit, item) "{{{
     let number = a:bull.Bite('^\x\{,8}')
-    call a:hulit.Print(a:item. number, "match character specified with hex number 0x". number)
+    let char = has("multi_byte_encoding") ? ' ('. strtrans(nr2char(str2nr(number,16))).')' : ''
+    call a:hulit.Print(a:item. number, printf("match character specified with hex number 0x%s%s", number, char))
 endfunc "}}}
 
 let s:doc['\%d'] = function("s:DocBspercDecimal") " 123
