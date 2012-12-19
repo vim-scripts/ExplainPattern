@@ -1,0 +1,48 @@
+This is a mirror of http://www.vim.org/scripts/script.php?script_id=4364
+
+:ExplainPattern {pattern}               or
+:ExplainPattern {register}
+
+        parse the given Vim {pattern} and print a line of help
+        (with color) for each found pattern item.  Nested
+        items get extra indent.
+
+        A single-char argument is used as {register} argument:
+                /	explain the last search pattern
+                *	explain pattern from the clipboard
+                a	explain pattern from register a
+
+
+Example:  :ExplainPattern *
+
+Register: *
+Pattern: \C^\%(\\\%(@<.\|%[dxouU[(^$V#<>]\=\|z[1-9se(]\|@[>=!]\|_[[^$.]\=\|.\)\|.\)
+  \C         match case while matching the pattern
+  ^          match at start of line (or string)
+  \%(        start of non-capturing group
+  |   \\         literal string (1 atom(s))
+  |   \%(        start of non-capturing group
+  |   |   @<         literal string (2 atom(s))
+  |   |   .          match any character
+  |   | \|         OR branch
+  |   |   %          literal string (1 atom(s))
+  |   |   [dxouU[(^$V#<>] collection
+  |   |   \=         (multi) zero or one of the preceding atom
+  |   | \|         OR branch
+  |   |   z          literal string (1 atom(s))
+  |   |   [1-9se(]   collection
+  |   | \|         OR branch
+  |   |   @          literal string (1 atom(s))
+  |   |   [>=!]      collection
+  |   | \|         OR branch
+  |   |   _          literal string (1 atom(s))
+  |   |   [[^$.]     collection
+  |   |   \=         (multi) zero or one of the preceding atom
+  |   | \|         OR branch
+  |   |   .          match any character
+  |   \)         end of group
+  | \|         OR branch
+  |   .          match any character
+  \)         end of group
+
+2013 Jan 17
