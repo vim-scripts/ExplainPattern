@@ -1,24 +1,19 @@
 " File:         explainpat.vim
 " Created:      2011 Nov 02
-" Last Change:  2012 Dec 19
-" Rev Days:     3
+" Last Change:  2013 Mar 09
+" Rev Days:     8
 " Author:	Andy Wokula <anwoku@yahoo.de>
 " License:	Vim License, see :h license
-" Version:	0.2
+" Version:	0.5
 
 " Implements :ExplainPattern [pattern]
 
 " TODO {{{
 " - more testing, completeness check
-" - detailed collections
-" - \z
+" ? detailed collections
 " ? literal string: also print the unescaped magic items
 " ? literal string: show leading/trailing spaces
-" + start of "first" capturing group, start of 2nd ...
-" + `\|' should get less indent than the branches, do we need to create an
-"   AST?	! no, keep it straight forward
-" + \%[...]
-" + \{, \{-
+"
 "}}}
 
 " Init Folklore {{{
@@ -27,7 +22,9 @@ set cpo&vim
 let g:explainpat#loaded = 1
 "}}}
 
-func! explainpat#ExplainPattern(cmd_arg) "{{{
+func! explainpat#ExplainPattern(cmd_arg, ...) "{{{
+    " {a:1}	alternative help printer object (caution, no sanity check)
+    "		(for test running)
     if a:cmd_arg == ""
 	" let pattern_str = nwo#vis#Get()
 	echo "(usage) :ExplainPattern [{register} | {pattern}]"
@@ -45,11 +42,15 @@ func! explainpat#ExplainPattern(cmd_arg) "{{{
 	echo printf('Magic Pattern: %s', magicpat)
     endif
 
-    " hmm, we need state for \%[ ... ]
+    " we need state:
+    " set flag when in `\%[ ... ]' (optionally matched atoms):
     let s:in_opt_atoms = 0
+    " counter for `\(':
     let s:capture_group_nr = 0
+    " >=1 at pos 0 or after '\|', '\&', '\(', '\%(' or '\n'; else 0 or less:
+    let s:at_begin_of_pat = 1
 
-    let hulit = s:NewHelpPrinter()
+    let hulit = a:0>=1 && type(a:1)==s:DICT ? a:1 : s:NewHelpPrinter()
     call hulit.AddIndent('  ')
     let bull = s:NewTokenBiter(magicpat, '')
     while !bull.AtEnd()
@@ -62,7 +63,10 @@ func! explainpat#ExplainPattern(cmd_arg) "{{{
 		call hulit.Print(item, Doc)
 	    elseif type(Doc) == s:FUNCREF
 		call call(Doc, [bull, hulit, item])
+	    elseif type(Doc) == s:LIST
+		call call(Doc[0], [bull, hulit, item, Doc[1]])
 	    endif
+	    let s:at_begin_of_pat -= 1
 	else
 	    echoerr printf('ExplainPattern: cannot parse "%s"', bull.Rest())
 	    break
@@ -76,9 +80,10 @@ endfunc "}}}
 let s:STRING = type("")
 let s:DICT   = type({})
 let s:FUNCREF = type(function("tr"))
+let s:LIST = type([])
 " }}}
 
-let s:magic_item_pattern = '\C^\%(\\\%(@<.\|%[dxouU[(^$V#<>]\=\|z[1-9se(]\|{\|@[>=!]\|_[[^$.]\=\|.\)\|.\)'
+let s:magic_item_pattern = '\C^\%(\\\%(@<.\|%[dxouU[(^$V#<>]\=\|z[1-9se(]\|@[>=!]\|_[[^$.]\=\|.\)\|.\)'
 
 let s:doc = {} " {{{
 " this is all the help data ...
@@ -87,23 +92,33 @@ let s:doc = {} " {{{
 
 func! s:DocOrBranch(bull, hulit, item) "{{{
     call a:hulit.RemIndent()
-    call a:hulit.Print(a:item, "OR branch")
+    call a:hulit.Print(a:item, "OR (separate alternatives)")
     call a:hulit.AddIndent('  ')
+    let s:at_begin_of_pat = 2
 endfunc "}}}
 
 let s:doc['\|'] = function("s:DocOrBranch")
-let s:doc['\&'] = "AND branch"
+
+func! s:DocBeginOfPat(bull, hulit, item, msg) "{{{
+    call a:hulit.Print(a:item, a:msg)
+    let s:at_begin_of_pat = 2
+endfunc "}}}
+
+let s:doc['\&'] = [function("s:DocBeginOfPat"), "AND (separate concats, all must match)"]
 
 let s:ord = split('n first second third fourth fifth sixth seventh eighth ninth')
 
 func! s:DocGroupStart(bull, hulit, item) "{{{
     if a:item == '\%('
 	call a:hulit.Print(a:item, "start of non-capturing group")
-    else " a:item == '\('
+    elseif a:item == '\('
 	let s:capture_group_nr += 1
 	call a:hulit.Print(a:item, printf("start of %s capturing group", get(s:ord, s:capture_group_nr, '(invalid)')))
+    else " a:item == '\z('
+	call a:hulit.Print(a:item, 'start of "external" group (only usable in :syn-region)')
     endif
     call a:hulit.AddIndent('| ', '  ')
+    let s:at_begin_of_pat = 2
 endfunc "}}}
 func! s:DocGroupEnd(bull, hulit, item) "{{{
     call a:hulit.RemIndent(2)
@@ -113,9 +128,21 @@ endfunc "}}}
 let s:doc['\('] = function("s:DocGroupStart")
 let s:doc['\%('] = function("s:DocGroupStart")
 let s:doc['\)'] =  function("s:DocGroupEnd")
+" let s:doc['\z('] = "only in syntax scripts"
+let s:doc['\z('] = function("s:DocGroupStart")
 
-let s:doc['\z('] = "only in syntax scripts"
-let s:doc['*'] = "(multi) zero or more of the preceding atom"
+func! s:DocStar(bull, hulit, item) "{{{
+    if s:at_begin_of_pat >= 1
+	" call a:hulit.Print(a:item, "(at begin of pattern) literal `*'")
+	call a:hulit.AddLiteral(a:item)
+    else
+	call a:hulit.Print(a:item, "(multi) zero or more of the preceding atom")
+    endif
+endfunc "}}}
+
+" let s:doc['*'] = "(multi) zero or more of the preceding atom"
+let s:doc['*'] = function("s:DocStar")
+
 let s:doc['\+'] = "(multi) one or more of the preceding atom"
 let s:doc['\='] = "(multi) zero or one of the preceding atom"
 let s:doc['\?'] = "(multi) zero or one of the preceding atom"
@@ -144,9 +171,36 @@ let s:doc['\@='] = "(assertion) require match for preceding atom"
 let s:doc['\@!'] = "(assertion) forbid match for preceding atom"
 let s:doc['\@<='] = "(assertion) require match for preceding atom to the left"
 let s:doc['\@<!'] = "(assertion) forbid match for preceding atom to the left"
-let s:doc['^'] = "(assertion) require match at start of line"
+
+func! s:DocCircumFlex(bull, hulit, item) "{{{
+    if s:at_begin_of_pat >= 1
+	call a:hulit.Print(a:item, "(assertion) require match at start of line")
+	" after `^' is not at begin of pattern ... handle special case `^*' here:
+	if a:bull.Bite('^\*') == "*"
+	    call a:hulit.AddLiteral("*")
+	endif
+    else
+	" call a:hulit.Print(a:item, "(not at begin of pattern) literal `^'")
+	call a:hulit.AddLiteral(a:item)
+    endif
+endfunc "}}}
+
+" let s:doc['^'] = "(assertion) require match at start of line"
+let s:doc['^'] = function("s:DocCircumFlex")
+
 let s:doc['\_^'] = "(assertion) like `^', allowed anywhere in the pattern"
-let s:doc['$'] = "(assertion) require match at end of line"
+
+func! s:DocDollar(bull, hulit, item) "{{{
+    if a:bull.Rest() =~ '^$\|^\\[&|)n]'
+	call a:hulit.Print(a:item, "(assertion) require match at end of line")
+    else
+	call a:hulit.AddLiteral(a:item)
+    endif
+endfunc "}}}
+
+" let s:doc['$'] = "(assertion) require match at end of line"
+let s:doc['$'] = function("s:DocDollar")
+
 let s:doc['\_$'] = "(assertion) like `$', allowed anywhere in the pattern"
 let s:doc['.'] = "match any character"
 let s:doc['\_.'] = "match any character or newline"
@@ -266,7 +320,7 @@ let s:doc['\e'] = "match <Esc>"
 let s:doc['\t'] = "match <Tab>"
 let s:doc['\r'] = "match <CR>"
 let s:doc['\b'] = "match CTRL-H"
-let s:doc['\n'] = "match a newline"
+let s:doc['\n'] = [function("s:DocBeginOfPat"), "match a newline"]
 let s:doc['~'] = "match the last given substitute string"
 let s:doc['\1'] = "match first captured string"
 let s:doc['\2'] = "match second captured string"
@@ -278,21 +332,31 @@ let s:doc['\7'] = "match seventh captured string"
 let s:doc['\8'] = "match eighth captured string"
 let s:doc['\9'] = "match ninth captured string"
 
-" \z1
-" \z2
-" \z9
+let s:doc['\z1'] = 'match same string matched by first "external" group'
+let s:doc['\z2'] = 'match same string matched by second "external" group'
+let s:doc['\z3'] = 'match same string matched by third "external" group'
+let s:doc['\z4'] = 'match same string matched by fourth "external" group '
+let s:doc['\z5'] = 'match same string matched by fifth "external" group'
+let s:doc['\z6'] = 'match same string matched by sixth "external" group'
+let s:doc['\z7'] = 'match same string matched by seventh "external" group'
+let s:doc['\z8'] = 'match same string matched by eighth "external" group'
+let s:doc['\z9'] = 'match same string matched by ninth "external" group'
 
 " from MakeMagic()
 " skip the rest of a collection
-let s:coll_skip_pat = '^\^\=]\=\%(\%(\\[\^\]\-\\bertn]\|\[:\w\+:]\|[^\]]\)\@>\)*]'
+let s:coll_skip_pat = '^\^\=]\=\%(\%(\\[\^\]\-\\bertn]\|\[:\w\+:]\|\[=.=]\|\[\..\.]\|[^\]]\)\@>\)*]'
 
 func! s:DocCollection(bull, hulit, item) "{{{
     let collstr = a:bull.Bite(s:coll_skip_pat)
-    let inverse = collstr =~ '^\^'
-    let with_nl = a:item == '\_['
-    let descr = inverse ? printf('collection not matching [%s', collstr[1:]) : 'collection'
-    let descr_nl = printf("%s%s", (inverse && with_nl ? ', but' : ''), (with_nl ? ' with end-of-line added' : ''))
-    call a:hulit.Print(a:item. collstr, descr. descr_nl)
+    if collstr != ""
+	let inverse = collstr =~ '^\^'
+	let with_nl = a:item == '\_['
+	let descr = inverse ? printf('collection not matching [%s', collstr[1:]) : 'collection'
+	let descr_nl = printf("%s%s", (inverse && with_nl ? ', but' : ''), (with_nl ? ' with end-of-line added' : ''))
+	call a:hulit.Print(a:item. collstr, descr. descr_nl)
+    else
+	call a:hulit.AddLiteral('[')
+    endif
 endfunc "}}}
 
 let s:doc['['] = function("s:DocCollection")
@@ -318,9 +382,15 @@ endfunc "}}}
 let s:doc['\%['] = function("s:DocOptAtoms")
 let s:doc[']'] = function("s:DocOptAtoms")
 
-let s:doc['\c'] = "ignore case while matching the pattern"
-let s:doc['\C'] = "match case while matching the pattern"
-let s:doc['\Z'] = "ignore composing characters in the pattern"
+func! s:DocAnywhere(bull, hulit, item, msg) "{{{
+    call a:hulit.Print(a:item, a:msg)
+    " keep state:
+    let s:at_begin_of_pat += 1
+endfunc "}}}
+
+let s:doc['\c'] = [function("s:DocAnywhere"), "ignore case while matching the pattern"]
+let s:doc['\C'] = [function("s:DocAnywhere"), "match case while matching the pattern"]
+let s:doc['\Z'] = [function("s:DocAnywhere"), "ignore composing characters in the pattern"]
 
 " \%d 123
 " \%x 2a
@@ -466,7 +536,7 @@ func! s:NewTokenBiter(str, ...) "{{{
 	return bite
     endfunc "}}}
 
-    " get the unparsed rest of input
+    " get the unparsed rest of input (not consuming)
     func! obj.Rest() "{{{
 	return self.str
     endfunc "}}}

@@ -1,20 +1,21 @@
 *explainpat.txt*    Give detailed help on a regexp pattern.
 
-		    For Vim version 7.0.  Last change: 2012 Dec 19
+		    For Vim version 7.0.  Last change: 2013 Mar 09
 		    By Andy Wokula <anwoku@yahoo.de>
 
 						*explainpat* *explainpat.vim*
-When you want to inspect a given Vim regexp pattern, this script might save
-you lots of help lookups.  And it will make the structure of a regexp visible.
-And it helps spotting mistakes.
+ExplainPat is a plugin to inspect a Vim regexp pattern and show a line of help
+for each found regexp item.
 
-If you find that it explains something wrong, drop me an email.
+If you find that it explains something wrong, please drop me an email.
 
+URL http://vim.sourceforge.net/scripts/script.php?script_id=4364
 ==============================================================================
 						*:ExplainPattern*
-:ExplainPattern [{pattern} | {register}]
-			parse the given Vim {pattern} and print a line of help
-			(with color) for each found pattern item.  Nested
+:ExplainPattern {pattern}
+:ExplainPattern {register}
+			inspect the given Vim {pattern} and print a line of
+			help (with color) for each found pattern item.  Nested
 			items get extra indent.
 
 			A single-char argument is used as {register} argument:
@@ -23,14 +24,47 @@ If you find that it explains something wrong, drop me an email.
 				a	explain pattern from register a
 
 Notes:
-The pattern is first converted into a purely magic pattern using
-|nwo#magic#MakeMagic()|.  This means that embedded |\V| |\M| |\m| |\V|
+The pattern is first converted into a purely |magic| pattern using
+|nwo#magic#MakeMagic()|.  This means that embedded |/\V| |/\M| |/\m| |/\v|
 specifiers are effectively removed from the explanation.
 
 :ExplainPattern also accepts some invalid patterns: >
 	:ExplainPattern \)
 	Pattern: \)
 	\)         end of group
+
+==============================================================================
+History:
+
+v0.5
++ BF `$\n^`
++ wording: `\|' is not an "OR branch" (it separates or branches)
++ NF added tests (not part of release)
++ NF accept custom help printer (for testing purpose, could also be used to
+  export HTML etc.)
+
+v0.4
++ BF `[foo` is a literal string
++ BF for |/star|, |/^| and |/$|, distinguish position in the pattern
+  (sometimes these become literal); special cases: `^**', `^^', `\c^^', `$$',
+  `a\|^b', `a\&*b', `[ab', `\_[ab', ...
+
+v0.3
++ BF accept `\z(...\)` and `\z[N]`
++ BF accept `[=a=]` and `[.a.]` in collections
+
+v0.2
++ include vim_use suggestions [2012 Dec 19]
+  * for collections [^...], add "not matching [...]"
+  * fix `\%>'a1`
+  * more detailed `\%x31`
+
+v0.1 (initial version)
++ start of "first" capturing group, start of 2nd ...
++ `\|' should get less indent than the branches, do we need to create an
+  AST?	! no, keep it straight forward
++ \%[...]
++ \{, \{-
 
 ==============================================================================
 vim:tw=78:fo=tcq2:sts=0:ts=8:sw=8:fdm=marker:fmr=^_\^,^\^:ft=help:

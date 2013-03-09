@@ -1,10 +1,10 @@
 " File:         explainpat.vim
 " Created:      2011 Nov 02
-" Last Change:  2012 Dec 19
-" Rev Days:     3
+" Last Change:  2013 Mar 08
+" Rev Days:     7
 " Author:	Andy Wokula <anwoku@yahoo.de>
 " License:	Vim License, see :h license
-" Version:	0.2
+" Version:	0.5
 
 " :ExplainPattern [pattern]
 "

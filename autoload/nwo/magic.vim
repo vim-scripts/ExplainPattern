@@ -1,10 +1,10 @@
 " File:         makemagic.vim
 " Created:      2011 Apr 18
-" Last Change:  2012 Dec 19
-" Rev Days:     4
+" Last Change:  2013 Mar 06
+" Rev Days:     6
 " Author:	Andy Wokula <anwoku@yahoo.de>
 " License:	Vim License, see :h license
-" Version:	0.1
+" Version:	0.3
 
 "" Comments {{{
 
@@ -18,6 +18,7 @@
 " TODO
 " - recognize [#-\\]], with spaces: [ #-\ \] ]
 "   (collection ends at second ']')
+" + \v\z( => \z(
 
 " 2011 Nov 01	copied from asneeded\makemagic.vim
 "		now asneeded\nwo\makemagic.vim (comments there!)
@@ -108,7 +109,7 @@ endfunc "}}}
 " s:variables {{{
 
 " pattern to match very magic items:
-let s:vmagic_items_pat = '\\.\|%\%([#$(UV[\^cdlouvx]\|''.\|[<>]\%(''.\|[clv]\)\)\|[&()+<=>?|]\|@\%([!=>]\|<[!=]\)\|{'
+let s:vmagic_items_pat = '\C\\\%(z(\|.\)\|%\%([#$(UV[\^cdlouvx]\|[<>]\=\%(''.\|\d\+[clv]\)\)\|[&()+<=>?|]\|@\%([!=>]\|<[!=]\)\|{'
 
 " not escaped - require an even number of '\' (zero or more) to the left:
 let s:not_escaped  = '\%(\%(^\|[^\\]\)\%(\\\\\)*\)\@<='
@@ -129,7 +130,7 @@ let s:switchpat = {
 
 " skip over a collection (starting at '[' (same for all magic modes) or
 " starting at '\_[' (same for all modes))
-let s:collection_skip_pat = '^\%(\\_\)\=\[\^\=]\=\%(\%(\\[\^\]\-\\bertn]\|\[:\w\+:]\|[^\]]\)\@>\)*]'
+let s:collection_skip_pat = '^\%(\\_\)\=\[\^\=]\=\%(\%(\\[\^\]\-\\bertn]\|\[:\w\+:]\|\[=.=]\|\[\..\.]\|[^\]]\)\@>\)*]'
 
 " }}}
 
